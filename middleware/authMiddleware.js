@@ -49,13 +49,16 @@
 
 
 
-// middleware auth
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
+/* ============================
+   PROTECT ROUTES (JWT)
+   ============================ */
 exports.protect = async (req, res, next) => {
   let token;
 
+  // ✅ Read token from Authorization header
   if (
     req.headers.authorization &&
     req.headers.authorization.startsWith("Bearer")
@@ -64,34 +67,64 @@ exports.protect = async (req, res, next) => {
   }
 
   if (!token) {
-    return res.status(401).json({ success: false, error: "Not authorized to access this route" });
+    return res.status(401).json({
+      success: false,
+      error: "Not authorized to access this route",
+    });
   }
 
   try {
+    // ✅ Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findById(decoded.id).select("-password");
+
+    // ✅ Attach logged-in user (without password)
+    const user = await User.findById(decoded.id).select("-password");
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: "User no longer exists",
+      });
+    }
+
+    req.user = user;
     next();
   } catch (err) {
-    return res.status(401).json({ success: false, error: "Not authorized to access this route" });
+    console.error("JWT Error:", err.message);
+    return res.status(401).json({
+      success: false,
+      error: "Not authorized to access this route",
+    });
   }
 };
 
+/* ============================
+   ROLE-BASED AUTHORIZATION
+   ============================ */
 exports.authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
-      return res.status(401).json({ message: "User not authenticated" });
-    }
-
-    // Normalize to lowercase for case-insensitive comparison
-    const userRole = req.user.role ? req.user.role.toLowerCase() : "";
-    const allowedRoles = roles.map(r => r.toLowerCase());
-
-    if (!allowedRoles.includes(userRole)) {
-      console.log(`[Authorization Error] User: ${req.user.email} | Role: ${req.user.role} | Attempted: ${roles.join(", ")}`);
-      return res.status(403).json({
-        message: `Access denied. Role '${req.user.role}' is not authorized.`
+      return res.status(401).json({
+        message: "User not authenticated",
       });
     }
+
+    // ✅ Normalize roles (case-insensitive)
+    const userRole = req.user.role?.toLowerCase();
+    const allowedRoles = roles.map((r) => r.toLowerCase());
+
+    if (!allowedRoles.includes(userRole)) {
+      console.log(
+        `[Authorization Error] User: ${req.user.email} | Role: ${req.user.role} | Allowed: ${roles.join(
+          ", "
+        )}`
+      );
+
+      return res.status(403).json({
+        message: `Access denied. Role '${req.user.role}' is not authorized.`,
+      });
+    }
+
     next();
   };
 };
