@@ -38,10 +38,12 @@ app.use(cors({
       return callback(null, true);
     }
 
-    console.error('❌ CORS BLOCKED:', origin);
-    return callback(new Error('Not allowed by CORS'));
+    console.warn('❌ CORS BLOCKED:', origin);
+    return callback(null, false); // ✅ DO NOT THROW ERROR
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // 🔥 REQUIRED FOR RENDER PREFLIGHT
@@ -53,7 +55,14 @@ app.options('*', cors());
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-app.use(helmet());
+
+// ✅ HELMET FIX (DO NOT BLOCK CORS)
+app.use(
+  helmet({
+    crossOriginResourcePolicy: false,
+  })
+);
+
 app.use(morgan('dev'));
 
 /* =========================
